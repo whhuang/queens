@@ -156,8 +156,9 @@ class Puzzle:
     - Don't make an impossible puzzle - maybe start with queen placements, then fill in the colors?
       - Puzzles with multiple solutions are invalid
     '''
-    def __init__(self, size=DEFAULT_GRID_SIZE):
+    def __init__(self, size=DEFAULT_GRID_SIZE, seed=0):
         self.size = size
+        self.seed = seed
         self.solution_grid = Grid(size)
         self.queens = [] # Queens is a list of (row, col, color_index)
         self.create_puzzle()
@@ -204,8 +205,8 @@ class Puzzle:
                 print(f'Failed after {attempts} attempts')
                 break
 
-    def create_puzzle(self, seed=0):
-        random.seed(seed)
+    def create_puzzle(self):
+        random.seed(self.seed)
         self._create_random_solution()
         empty_cells = [(i, j) for (i, row) in enumerate(self.solution_grid.grid) for (j, cell) in enumerate(row) if cell.state == CellStates.CLEARED]
         while len(empty_cells) > 0:

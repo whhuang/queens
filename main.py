@@ -17,7 +17,9 @@ class GameBoard:
     def __init__(self, size=DEFAULT_GRID_SIZE):
         # Game setup
         self.size = size
+        self.seed = 0
         self.puzzle = Puzzle(self.size)
+        self.display_game_metadata()
 
         # Game play
         self.game_state = GridState.NOT_SOLVED
@@ -25,25 +27,32 @@ class GameBoard:
         self.display_board_state()
         self.display_board_ui()
         self.update_state()
+        with ui.row():
+            ui.button('Clear', on_click=self.clear_board)
+            ui.button('Next', on_click=self.increment_game)
 
         # Try to get a unique board
         self.timer = ui.timer(1, self.wait_for_unique_puzzle)
-        self.switch = ui.switch('Refresh until you get a unique puzzle').bind_value_to(self.timer, 'active')
+        self.switch = ui.switch('Increment until you get a unique puzzle').bind_value_to(self.timer, 'active')
         self.attempts = 0
-        self.display_attempts()
+        self.display_unique()
+
+    @ui.refreshable
+    def display_game_metadata(self):
+        ui.markdown(f'Grid size: {self.size}, puzzle index: {self.seed}')
 
     def wait_for_unique_puzzle(self):
         self.puzzle.create_puzzle(self.attempts)
         self.attempts += 1
         print(f'Unique: {self.puzzle.is_unique_puzzle()} - Attempt {self.attempts}')
         self.display_board_ui.refresh()
-        self.display_attempts.refresh()
+        self.display_unique.refresh()
         if self.puzzle.is_unique_puzzle():
             self.switch.set_value(False)
             self.timer.deactivate()
 
     @ui.refreshable
-    def display_attempts(self):
+    def display_unique(self):
         ui.markdown(f'Unique board? {self.puzzle.is_unique_puzzle()}. Attempt {self.attempts}')
 
     @ui.refreshable
@@ -70,36 +79,66 @@ class GameBoard:
     
     def clear_board(self):
         self.game_grid.clear()
-        self.update_state()               
+        self.update_state()
 
-    def recreate_board(self, size):
-        size_int = size
-        if type(size) == str:
-            if size.isdigit() and MIN_GRID_SIZE <= int(size) <= MAX_GRID_SIZE:
-                size_int = int(size)
-            else:
-                return
-        self.size = size_int
-        self.puzzle = Puzzle(self.size)
+    def increment_game(self):
+        self.seed += 1
+        self.recreate_board()
+
+    def recreate_board(self, size=None, seed=None):
+        if size is not None:
+            size_int = size
+            if type(size) == str:
+                if size.isdigit() and MIN_GRID_SIZE <= int(size) <= MAX_GRID_SIZE:
+                    size_int = int(size)
+                else:
+                    return
+            self.size = size_int
+        if seed is not None:
+            if type(seed) == str:
+                if seed.isdigit():
+                    self.seed = int(seed)
+                else:
+                    return
+            self.seed = seed
+        self.puzzle = Puzzle(self.size, self.seed)
+        self.display_game_metadata.refresh()
         self.display_board_ui.refresh()
+        self.display_unique.refresh()
 
 
 #######################
 # RENDER PAGE
 #######################
 
+ui.page_title('Queens')
+
 ui.markdown('''
 #### Play Queens!
 ''')
-ui.page_title('Queens')
-ui.input(
-    'Grid size',
-    placeholder=DEFAULT_GRID_SIZE,
-    on_change=lambda e: board.recreate_board(e.value),
-    validation=lambda value: f'Must be number between {MIN_GRID_SIZE} and {MAX_GRID_SIZE}' if not value.isdigit() or int(value) < MIN_GRID_SIZE or int(value) > MAX_GRID_SIZE else None
-)
-board = GameBoard()
 
-ui.button('Clear', on_click=board.clear_board)
+with ui.expansion('How to play', icon='info'):
+    ui.markdown('''
+##### Rules
+
+- There is one and only one queen per row, column, and color
+- No queen can be within 1 square (including diagonals) of another queen
+- Place all queens to solve the puzzle
+''')
+
+with ui.row():
+    ui.input(
+        'Grid size',
+        placeholder=DEFAULT_GRID_SIZE,
+        on_change=lambda e: board.recreate_board(size=e.value),
+        validation=lambda value: f'Must be number between {MIN_GRID_SIZE} and {MAX_GRID_SIZE}' if not value.isdigit() or int(value) < MIN_GRID_SIZE or int(value) > MAX_GRID_SIZE else None
+    )
+    ui.input(
+        'Puzzle number',
+        placeholder=0,
+        on_change=lambda e: board.recreate_board(seed=e.value),
+        validation=lambda value: f'Must be a number' if not value.isdigit() else None
+    )
+board = GameBoard()
 
 ui.run()
