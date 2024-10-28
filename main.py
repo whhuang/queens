@@ -1,5 +1,6 @@
 import random
 
+from enum import Enum
 from nicegui import ui
 
 
@@ -10,6 +11,7 @@ ui.markdown('''
 MIN_GRID_SIZE = 4
 MAX_GRID_SIZE = 12
 DEFAULT_GRID_SIZE = 8
+    
 
 class ButtonState:
     display = [' ', 'X', 'Q']
@@ -23,9 +25,6 @@ class ButtonState:
         self.text = self.display[self.state]
 
     def set_state(self, state):
-        '''
-        internal/debug use only!!
-        '''
         self.state = state
         self.text = self.display[self.state]
 
@@ -56,39 +55,101 @@ class Grid:
 
     MAX_SOLUTION_ATTEMPTS = 10
 
+    class GameState(Enum):
+        NOT_INITIALIZED = 0
+        READY = 1
+        IN_PROGRESS = 2
+        SUCCESS = 3
+        ERROR = 4
+
     def __init__(self, size=DEFAULT_GRID_SIZE):
         random.seed(0)
+        # Game setup
         self.size = size
         self.solution_grid = [[]] # Solution grid type is a tuple of (is_queen, color_string)
         self.queens = [] # Queens is a list of (row, col, color)
-
-        self.display_grid = [[]]
         self.create_grid()
-        self.grid_ui()
+
+        # Game play
+        self.game_state = self.GameState.NOT_INITIALIZED
+        self.display_grid = [[]]
+        self.display_grid_state()
+        self.display_grid_ui()
+        self.update_state()
 
     @ui.refreshable
-    def grid_ui(self):
+    def display_grid_state(self):
+        ui.markdown(f'Game state: {str(self.game_state)}')
+
+    def _evaluate_state(self):
+        # Evaluate the current state of the game based on the user inputs
+        # If self.queens is not fully populated, the game is not initialized
+        if len(self.queens) < self.size:
+            self.game_state = self.GameState.NOT_INITIALIZED
+            return
+        # Now iterate through the display grid and check:
+        # - If all 0's, the game is ready
+        # - If any of the following rules are violated, the game is in error:
+        #   - No two queens are in the same row
+        #   - No two queens are in the same column
+        #   - No queen is directly neighboring another queen in all directions, including diagonals
+        # - If there are no errors and all queens are placed, the game is successful
+        # - Otherwise, the game is in progress
+        self.game_state = self.GameState.READY
+        game_queens = []
+        for i in range(self.size):
+            for j in range(self.size):
+                if self.display_grid[i][j].state != 0:
+                    self.game_state = self.GameState.IN_PROGRESS
+                if self.display_grid[i][j].state == 2:
+                    game_queens.append((i, j))
+        # Check if the queen placements are valid
+        for queen in game_queens:
+            row, col = queen
+            for other_queen in game_queens:
+                if queen == other_queen:
+                    continue
+                other_row, other_col = other_queen
+                if row == other_row or col == other_col or (abs(row - other_row) <= 1 and abs(col - other_col) <= 1):
+                    self.game_state = self.GameState.ERROR
+                    return
+        # If game state is valid and all queens are placed, the game is successful
+        if len(game_queens) == self.size:
+            self.game_state = self.GameState.SUCCESS
+    
+    def update_state(self):
+        self._evaluate_state()
+        self.display_grid_state.refresh()
+
+    @ui.refreshable
+    def display_grid_ui(self):
         if len(self.queens) < self.size:
             ui.markdown(f'Failed to generate a valid board after {self.MAX_SOLUTION_ATTEMPTS} attempts. Please report this bug.')
             return
 
-        self.display_grid = [[0 for _ in range(self.size)] for _ in range(self.size)]
-        with ui.grid(columns=self.size).classes("gap-1"):
+        self.display_grid = [[None for _ in range(self.size)] for _ in range(self.size)]
+        with ui.grid(columns=self.size).classes("gap-1").on('click', self.update_state):
             for i in range(self.size):
                 for j in range(self.size):
                     cell = self.solution_grid[i][j]
-                    self.display_grid[i][j] = cell[1]
                     button_state = ButtonState()
+                    self.display_grid[i][j] = button_state
                     # DISPLAY SOLUTION - THIS IS FOR WHITNEY DEBUG
                     # button_state.set_state(cell[0] + 1)
-                    GameButton(button_state, color=self.display_grid[i][j])
+                    GameButton(button_state, color=cell[1])
+    
+    def clear_grid(self):
+        for i in range(self.size):
+            for j in range(self.size):
+                button = self.display_grid[i][j]
+                button.set_state(0)
+        self.update_state()
 
     def _create_solution(self):
         # Randomly place queens on the board such that they fulfill the following rules:
         # - No two queens are in the same row
         # - No two queens are in the same column
         # - No queen is directly neighboring another queen in all directions, including diagonals
-        
         self.queens = []
         attempts = 0
         while len(self.queens) < self.size: 
@@ -184,7 +245,7 @@ class Grid:
                     self.solution_grid[selected_row][selected_col] = (0, color)
                     empty_cells.remove((selected_row, selected_col))                
 
-    def update(self, size):
+    def recreate_grid(self, size):
         size_int = size
         if type(size) == str:
             if size.isdigit() and MIN_GRID_SIZE <= int(size) <= MAX_GRID_SIZE:
@@ -193,17 +254,17 @@ class Grid:
                 return
         self.size = size_int
         self.create_grid()
-        self.grid_ui.refresh()
+        self.display_grid_ui.refresh()
 
 
 ui.page_title('Queens')
 ui.input(
     'Grid size',
     placeholder=DEFAULT_GRID_SIZE,
-    on_change=lambda e: grid.update(e.value),
+    on_change=lambda e: grid.recreate_grid(e.value),
     validation=lambda value: f'Must be number between {MIN_GRID_SIZE} and {MAX_GRID_SIZE}' if not value.isdigit() or int(value) < MIN_GRID_SIZE or int(value) > MAX_GRID_SIZE else None
 )
 grid = Grid()
-
+ui.button('Clear', on_click=grid.clear_grid)
 
 ui.run()
