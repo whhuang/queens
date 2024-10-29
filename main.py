@@ -29,6 +29,7 @@ class GameBoard:
         self.update_state()
         with ui.row():
             ui.button('Clear', on_click=self.clear_board)
+            ui.button('Previous', on_click=self.decrement_game)
             ui.button('Next', on_click=self.increment_game)
 
         # Try to get a unique board
@@ -42,9 +43,12 @@ class GameBoard:
         ui.markdown(f'Grid size: {self.size}, puzzle index: {self.seed}')
 
     def wait_for_unique_puzzle(self):
-        self.puzzle.create_puzzle(self.attempts)
+        self.seed += 1
+        self.puzzle.seed = self.seed
+        self.puzzle.create_puzzle()
         self.attempts += 1
         print(f'Unique: {self.puzzle.is_unique_puzzle()} - Attempt {self.attempts}')
+        self.display_game_metadata.refresh()
         self.display_board_ui.refresh()
         self.display_unique.refresh()
         if self.puzzle.is_unique_puzzle():
@@ -57,7 +61,16 @@ class GameBoard:
 
     @ui.refreshable
     def display_board_state(self):
-        ui.markdown(f'Game state: {str(self.game_state)}')
+        match self.game_state:
+            case GridState.NOT_SOLVED:
+                with ui.element('div').classes('bg-gray-200 rounded-md p-2'):
+                    ui.label('Not solved')
+            case GridState.SOLVED:
+                with ui.element('div').classes('bg-green-200 rounded-md p-2'):
+                    ui.label('Solved!')
+            case GridState.ERROR:
+                with ui.element('div').classes('bg-red-200 rounded-md p-2'):
+                    ui.label('Invalid - see rules')
 
     def update_state(self):
         self.game_state = self.game_grid.evaluate_puzzle()
@@ -81,11 +94,16 @@ class GameBoard:
         self.game_grid.clear()
         self.update_state()
 
+    def decrement_game(self):
+        self.seed -= 1
+        self.recreate_board()
+
     def increment_game(self):
         self.seed += 1
         self.recreate_board()
 
     def recreate_board(self, size=None, seed=None):
+        self.attempts = 0
         if size is not None:
             size_int = size
             if type(size) == str:
