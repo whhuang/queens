@@ -10,7 +10,7 @@ from itertools import permutations
 
 MIN_GRID_SIZE = 5
 MAX_GRID_SIZE = 12
-DEFAULT_GRID_SIZE = 5
+DEFAULT_GRID_SIZE = 6
 MAX_SOLUTION_ATTEMPTS = 10
 
 
